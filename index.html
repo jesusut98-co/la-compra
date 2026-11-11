@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>La compra</title>
+<meta name="theme-color" content="#F2F6F1" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0F1512" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="La compra">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<script src="config.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F2F6F1; --surface:#FFFFFF; --ink:#16241C; --muted:#66756B; --line:#DDE5DD;
+  --mercadona:#0B8457; --consum:#E06A00; --on-accent:#FFFFFF; --danger:#B3261E;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#0F1512; --surface:#18211C; --ink:#E9F0EB; --muted:#8E9C93; --line:#27332C;
+    --mercadona:#35C48F; --consum:#FF9A3D; --on-accent:#0F1512; --danger:#FF8A80;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0F1512; --surface:#18211C; --ink:#E9F0EB; --muted:#8E9C93; --line:#27332C;
+  --mercadona:#35C48F; --consum:#FF9A3D; --on-accent:#0F1512; --danger:#FF8A80;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+body{
+  margin:0;min-height:100%;background:var(--bg);color:var(--ink);
+  font-family:"Bricolage Grotesque",ui-rounded,"Segoe UI",system-ui,sans-serif;
+  font-size:17px;line-height:1.35;-webkit-tap-highlight-color:transparent;
+  --accent:var(--mercadona);
+}
+body[data-store="consum"]{--accent:var(--consum)}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer;border:0;background:none;padding:0}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+
+.app{max-width:520px;margin:0 auto;padding:20px 16px 190px}
+
+header{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+h1{font-size:2.5rem;font-weight:800;letter-spacing:-.03em;line-height:1;margin:0}
+.sync{font-size:.8rem;color:var(--muted);white-space:nowrap}
+.summary{margin:6px 0 18px;color:var(--muted)}
+.gear{flex:none;width:44px;height:44px;margin:-8px -8px 0 0;font-size:1.3rem;border-radius:12px;color:var(--muted)}
+.head-right{display:flex;align-items:center;gap:6px}
+.gate{position:fixed;inset:0;z-index:30;background:var(--bg);display:flex;align-items:center;justify-content:center;
+  padding:calc(24px + env(safe-area-inset-top,0px)) 20px calc(24px + env(safe-area-inset-bottom,0px))}
+.gate-in{width:100%;max-width:380px}
+.gate h1{margin-bottom:8px}
+.gate p{color:var(--muted);margin:0 0 20px}
+.field{display:block;margin-bottom:12px}
+.field span{display:block;font-size:.9rem;font-weight:600;margin:0 0 6px 4px}
+.field input{width:100%;padding:14px 16px;border-radius:14px;border:1.5px solid var(--line);background:var(--surface);font-size:1.05rem}
+.field input:focus{outline:none;border-color:var(--accent)}
+.btn{display:block;width:100%;padding:15px;border-radius:14px;background:var(--accent);color:var(--on-accent);font-weight:600;font-size:1.05rem}
+.btn.ghost{background:var(--surface);color:var(--ink);border:1px solid var(--line);margin-top:10px}
+.err{color:var(--danger);font-size:.92rem;min-height:1.3em;margin:4px 4px 10px}
+.small{font-size:.85rem;color:var(--muted);margin:12px 4px 0}
+.grounding{width:100%;height:96px;border:0;margin-top:8px;border-radius:12px;background:transparent}
+
+/* Selector de tienda */
+.switch{position:relative;display:grid;grid-template-columns:1fr 1fr;background:var(--surface);
+  border:1px solid var(--line);border-radius:18px;padding:4px}
+.switch::before{content:"";position:absolute;top:4px;bottom:4px;left:4px;width:calc(50% - 4px);
+  border-radius:14px;background:var(--accent);transition:transform .28s cubic-bezier(.3,1.3,.5,1),background .28s}
+body[data-store="consum"] .switch::before{transform:translateX(100%)}
+.switch button{position:relative;padding:13px 8px;font-weight:600;border-radius:14px;
+  display:flex;align-items:center;justify-content:center;gap:8px;color:var(--muted);transition:color .2s}
+.switch button[aria-pressed="true"]{color:var(--on-accent)}
+.count{min-width:1.6em;padding:1px 7px;border-radius:99px;font-size:.8rem;font-weight:600;
+  background:var(--bg);color:var(--ink)}
+.switch button[aria-pressed="true"] .count{background:color-mix(in srgb,var(--on-accent) 22%,transparent);color:var(--on-accent)}
+
+/* Lista */
+h2{font-size:.95rem;font-weight:600;color:var(--muted);margin:22px 4px 6px;display:flex;align-items:center;justify-content:space-between}
+ul{list-style:none;margin:0;padding:0;background:var(--surface);border-radius:18px;overflow:hidden;border:1px solid var(--line)}
+li + li{border-top:1px solid var(--line)}
+.row{display:flex;align-items:center}
+.tick{flex:1;min-width:0;display:flex;align-items:center;gap:12px;padding:14px 4px 14px 14px;text-align:left}
+.box{flex:none;width:24px;height:24px;border-radius:50%;border:2px solid var(--accent);position:relative;transition:background .15s}
+.done .box{background:var(--accent)}
+.done .box::after{content:"";position:absolute;left:7px;top:3px;width:6px;height:11px;
+  border:solid var(--on-accent);border-width:0 2.5px 2.5px 0;transform:rotate(45deg)}
+.name{overflow-wrap:anywhere}
+.done .name{text-decoration:line-through;color:var(--muted)}
+.qty{flex:none;font-size:.85rem;font-weight:600;color:var(--accent)}
+.more{flex:none;width:48px;height:48px;font-size:1.3rem;color:var(--muted);border-radius:12px}
+.acts{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:0 14px 14px 50px}
+.acts button{padding:8px 12px;border-radius:10px;background:var(--bg);font-size:.9rem;font-weight:600}
+.acts .step{width:38px;padding:8px 0;font-size:1.1rem}
+.acts .n{min-width:1.4em;text-align:center;font-weight:600}
+.acts .del{color:var(--danger)}
+.link{font-size:.9rem;font-weight:600;color:var(--accent);padding:4px}
+.new{animation:pop .3s ease-out}
+@keyframes pop{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+
+.empty{margin:40px 12px;text-align:center;color:var(--muted)}
+.empty strong{display:block;color:var(--ink);font-size:1.25rem;font-weight:600;margin-bottom:6px}
+
+/* Barra para añadir */
+.dock{position:fixed;left:0;right:0;bottom:0;z-index:5;background:var(--bg);border-top:1px solid var(--line);
+  padding:10px 0 calc(12px + env(safe-area-inset-bottom,0px))}
+.dock-in{max-width:520px;margin:0 auto}
+.chips{display:flex;gap:8px;overflow-x:auto;padding:0 16px 10px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;padding:8px 14px;border-radius:99px;background:var(--surface);border:1px solid var(--line);
+  font-size:.92rem;white-space:nowrap}
+.chip:active{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+.add{display:flex;gap:8px;padding:0 16px}
+.add input{flex:1;min-width:0;padding:14px 16px;border-radius:16px;border:1.5px solid var(--line);background:var(--surface);font-size:1.05rem}
+.add input:focus{outline:none;border-color:var(--accent)}
+.add input::placeholder{color:var(--muted)}
+.add .go{flex:none;width:54px;border-radius:16px;background:var(--accent);color:var(--on-accent);
+  font-size:1.7rem;font-weight:600;line-height:1;transition:background .28s}
+.add .cam{flex:none;width:54px;border-radius:16px;background:var(--surface);border:1.5px solid var(--line);font-size:1.35rem;line-height:1}
+.add button:active{transform:scale(.94)}
+.add button[disabled]{opacity:.5}
+[hidden]{display:none!important}
+
+.txt{flex:1;min-width:0;display:flex;flex-direction:column}
+.note{font-size:.82rem;color:var(--muted)}
+.thumb{flex:none;width:44px;height:44px;border-radius:10px;object-fit:cover;background:var(--line)}
+.big{flex-basis:100%;width:100%;max-height:260px;object-fit:contain;border-radius:14px;background:var(--surface);border:1px solid var(--line)}
+
+.toast{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 16px 10px;padding:10px 14px;
+  border-radius:14px;background:var(--ink);color:var(--bg);font-size:.92rem}
+.toast button{flex:none;font-weight:600;color:inherit;text-decoration:underline;padding:4px}
+
+/* Hoja de búsqueda */
+.veil{position:fixed;inset:0;z-index:20;background:rgba(10,20,15,.45);display:flex;align-items:flex-end;justify-content:center}
+.sheet{width:100%;max-width:520px;max-height:86%;display:flex;flex-direction:column;background:var(--bg);
+  border-radius:22px 22px 0 0;padding:18px 16px calc(14px + env(safe-area-inset-bottom,0px));animation:rise .25s ease-out}
+@keyframes rise{from{transform:translateY(40px);opacity:0}to{transform:none;opacity:1}}
+.sheet-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+.sheet h3{margin:0;font-size:1.3rem;font-weight:800;letter-spacing:-.02em;overflow-wrap:anywhere}
+.sheet-close{flex:none;padding:9px 16px;border-radius:12px;background:var(--accent);color:var(--on-accent);font-weight:600}
+.sheet-body{overflow-y:auto;-webkit-overflow-scrolling:touch}
+.sheet-body ul{margin-bottom:12px}
+.row .pick{flex:1;min-width:0;width:auto}
+.chip.star{background:var(--accent);color:var(--on-accent);border-color:var(--accent);font-weight:600}
+.sheet h2:first-of-type{margin-top:6px}
+.pick{width:100%;display:flex;align-items:center;gap:12px;padding:13px 14px;text-align:left}
+.pick .plus{flex:none;width:26px;height:26px;border-radius:50%;background:var(--accent);color:var(--on-accent);
+  display:grid;place-items:center;font-weight:600;line-height:1}
+.pick.added .plus{background:none;color:var(--accent);border:2px solid var(--accent)}
+.hint{margin:4px 4px 12px;font-size:.88rem;color:var(--muted)}
+.hint button{color:var(--accent);font-weight:600;text-decoration:underline}
+
+@media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body data-store="mercadona">
+<div class="app">
+  <header>
+    <h1>La compra</h1>
+    <div class="head-right">
+      <span class="sync" id="sync" role="status"></span>
+      <button type="button" class="gear" id="gearBtn" aria-label="Ajustes">⚙︎</button>
+    </div>
+  </header>
+  <p class="summary" id="summary"></p>
+
+  <div class="switch" role="group" aria-label="Supermercado">
+    <button type="button" data-store="mercadona">Mercadona <span class="count"></span></button>
+    <button type="button" data-store="consum">Consum <span class="count"></span></button>
+  </div>
+
+  <main id="list"></main>
+</div>
+
+<div class="dock">
+  <div class="dock-in">
+    <div class="toast" id="toast" role="status" hidden><span id="toastText"></span><button type="button" id="toastUndo" hidden>Deshacer</button></div>
+    <div class="chips" id="chips" aria-label="Productos habituales"></div>
+    <div class="add">
+      <button type="button" id="camBtn" class="cam" hidden aria-label="Añadir con una foto del producto o del ticket">📷</button>
+      <input type="file" id="camFile" accept="image/*" capture="environment" hidden>
+      <input type="file" id="picFile" accept="image/*" hidden>
+      <input id="input" type="text" autocomplete="off" autocapitalize="sentences" enterkeyhint="done"
+             maxlength="60" placeholder="¿Qué falta en casa?" aria-label="Producto que falta">
+      <button type="button" id="addBtn" class="go" aria-label="Buscar y añadir a la lista">+</button>
+    </div>
+  </div>
+</div>
+
+<div class="gate" id="gate" hidden>
+  <div class="gate-in">
+    <h1>La compra</h1>
+    <p id="gateText">Entra con tu cuenta para ver la lista compartida.</p>
+    <div id="gateForm">
+      <label class="field"><span>Correo</span><input id="email" type="email" autocomplete="username" autocapitalize="off" inputmode="email"></label>
+      <label class="field"><span>Contraseña</span><input id="pass" type="password" autocomplete="current-password"></label>
+      <p class="err" id="gateErr" role="alert"></p>
+      <button type="button" class="btn" id="loginBtn">Entrar</button>
+    </div>
+  </div>
+</div>
+
+<div class="veil" id="veil" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+    <div class="sheet-head"><h3 id="sheetTitle"></h3><button type="button" class="sheet-close" id="sheetClose">Listo</button></div>
+    <div class="sheet-body" id="sheetBody"></div>
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+import { initializeFirestore, getFirestore, persistentLocalCache, persistentSingleTabManager,
+         doc, collection, onSnapshot, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+
+(function(){
+  "use strict";
+
+  var STORES = {mercadona:"Mercadona", consum:"Consum"};
+
+  // El orden importa: se usa la primera categoría que coincide.
+  var CATS = [
+    {id:"limpieza", name:"Limpieza e higiene", icon:"🧴", kw:["papel higienico","papel de cocina","servilleta","detergente","suavizante","lavavajillas","lejia","fregasuelos","limpia","estropajo","bayeta","bolsas de basura","gel","champu","jabon","pasta de dientes","dentifrico","cepillo","desodorante","panal","toallita","compresa","tampon","crema","colonia","maquinilla","papel de aluminio","papel film","friegasuelos","amoniaco"]},
+    {id:"congelados", name:"Congelados", icon:"🧊", kw:["congelad","helado","pizza","hielo","croqueta","nugget","varitas","san jacobo"]},
+    {id:"fruta", name:"Fruta y verdura", icon:"🥬", kw:["tomates","tomate ","tomate$","platano","manzana","naranja","limon","lechuga","cebolla","patata","zanahoria","ajo","pimiento","pepino","calabacin","berenjena","aguacate","fresa","uva","pera","melon","sandia","melocoton","kiwi","pina","mandarina","espinaca","brocoli","coliflor","champinon","seta","judias verdes","puerro","apio","calabaza","fruta","verdura","ensalada","perejil","cereza","mango","arandano","rucula","alcachofa","esparrago","remolacha","boniato","nectarina","ciruela","albaricoque","col"]},
+    {id:"carne", name:"Carne y pescado", icon:"🥩", kw:["pollo","carne","ternera","cerdo","lomo","chuleta","hamburguesa","salchicha","jamon","chorizo","pavo","bacon","beicon","salmon","merluza","pescado","gamba","langostino","mejillon","calamar","sepia","bacalao","dorada","lubina","costilla","solomillo","pechuga","muslo","fuet","salchichon","mortadela","embutido","longaniza","morcilla","conejo","cordero","sardina fresca","boqueron","pulpo","almeja"]},
+    {id:"lacteos", name:"Lácteos y huevos", icon:"🥛", kw:["leche","yogur","queso","huevo","mantequilla","nata","margarina","kefir","natilla","flan","cuajada","batido","requeson","mozzarella"]},
+    {id:"pan", name:"Pan y bollería", icon:"🥖", kw:["pan","barra","baguette","bolleria","croissant","cruasan","magdalena","galleta","bizcocho","tostada","donut","ensaimada","tortitas","picos","rosquilla"]},
+    {id:"bebidas", name:"Bebidas", icon:"🧃", kw:["agua","zumo","cerveza","vino","refresco","cola","tonica","gaseosa","cafe","infusion","manzanilla","cacao","horchata","cava","sidra","bebida","isotonica","tinto de verano","vermut"]},
+    {id:"despensa", name:"Despensa", icon:"🥫", kw:["arroz","pasta","macarron","espagueti","fideo","aceite","vinagre","sal","azucar","harina","lenteja","garbanzo","alubia","atun","tomate frito","tomate triturado","conserva","cereal","avena","mermelada","miel","chocolate","aceituna","caldo","sopa","salsa","mayonesa","ketchup","mostaza","especia","pimienta","pimenton","oregano","levadura","frutos secos","nuez","almendra","cacahuete","patatas fritas","snack","legumbre","maiz","sardina","tortilla","cuscus","quinoa","pure","cola cao","nocilla","crema de cacao","pipas","gominola","chicle","caramelo"]}
+  ];
+  var OTHER = {id:"otros", name:"Otros", icon:"🛒"};
+
+  var DEFAULTS = ["Leche","Huevos","Pan","Tomates","Plátanos","Aceite de oliva","Papel higiénico","Yogures","Pollo","Arroz","Pasta","Café","Agua","Cebollas","Patatas","Queso","Detergente","Atún","Manzanas","Lechuga","Jamón york","Mantequilla","Azúcar","Sal","Harina","Lentejas","Garbanzos","Tomate frito","Zumo","Galletas","Cereales","Lavavajillas","Gel de ducha","Zanahorias","Ajos","Limones","Naranjas","Carne picada","Salmón","Pizza"];
+
+  function norm(s){ return String(s).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g," ").trim(); }
+
+  function catOf(name){
+    var n = norm(name), padded = " " + n + " ";
+    // Las coincidencias más largas ganan (p. ej. «tomate frito» antes que «tomate»).
+    var best = null, bestLen = 0;
+    CATS.forEach(function(c){
+      c.kw.forEach(function(k){
+        var hit;
+        if (k.charAt(k.length-1) === "$") { var w = k.slice(0,-1); hit = n === w || n.slice(-w.length-1) === " " + w; k = w; }
+        else hit = padded.indexOf(" " + k) !== -1;
+        if (hit && k.length > bestLen){ best = c; bestLen = k.length; }
+      });
+    });
+    return (best || OTHER).id;
+  }
+  function catInfo(id){ for (var i=0;i<CATS.length;i++) if (CATS[i].id===id) return CATS[i]; return OTHER; }
+
+  /* ---------- Estado ---------- */
+  var LS = "lista-compra-v1", LS_STORE = "lista-compra-tienda";
+  var state = {items:[], freq:{}, updatedAt:0};
+  var store = "mercadona", openId = null, lastAdded = null;
+
+  function clean(d){
+    var out = {items:[], freq:{}, updatedAt:Number(d && d.updatedAt) || 0};
+    if (d && Array.isArray(d.items)) d.items.forEach(function(i){
+      if (!i || typeof i.name !== "string" || !STORES[i.store]) return;
+      out.items.push({id:String(i.id), name:i.name.slice(0,80), note:typeof i.note === "string" ? i.note.slice(0,60) : "", store:i.store,
+        qty:Math.max(1, Math.min(99, parseInt(i.qty,10) || 1)), done:!!i.done, cat:String(i.cat || catOf(i.name))});
+    });
+    if (d && d.freq && typeof d.freq === "object") Object.keys(d.freq).forEach(function(k){
+      var f = d.freq[k]; if (f && typeof f.label === "string") out.freq[k] = {label:f.label.slice(0,80), n:Number(f.n)||1,
+        note:typeof f.note === "string" ? f.note.slice(0,60) : "", cat:typeof f.cat === "string" ? f.cat : "",
+        st:(f.st && typeof f.st === "object") ? {mercadona:!!f.st.mercadona, consum:!!f.st.consum} : null};
+    });
+    return out;
+  }
+  try { var raw = localStorage.getItem(LS); if (raw) state = clean(JSON.parse(raw)); } catch(e){}
+  try { var s = localStorage.getItem(LS_STORE); if (STORES[s]) store = s; } catch(e){}
+
+  function saveLocal(){ try { localStorage.setItem(LS, JSON.stringify(state)); } catch(e){} }
+
+  /* Fotos de los productos (miniaturas) */
+  var LS_PICS = "lista-compra-fotos", photos = {}, picsCol = null;
+  function okPic(d){ return typeof d === "string" && d.indexOf("data:image/jpeg;base64,") === 0 && d.length < 200000; }
+  try { var rp = JSON.parse(localStorage.getItem(LS_PICS) || "{}"); Object.keys(rp).forEach(function(k){ if (okPic(rp[k])) photos[k] = rp[k]; }); } catch(e){}
+  function savePics(){ try { localStorage.setItem(LS_PICS, JSON.stringify(photos)); } catch(e){} }
+  function setPhoto(id, d){
+    if (!okPic(d)) return;
+    photos[id] = d; savePics(); render();
+    if (picsCol) setDoc(doc(picsCol, id), {d:d}).catch(function(){});
+  }
+  function prunePics(){
+    var alive = {}, changed = false;
+    state.items.forEach(function(i){ alive[i.id] = true; });
+    Object.keys(photos).forEach(function(k){
+      if (alive[k]) return;
+      delete photos[k]; changed = true;
+      if (picsCol) deleteDoc(doc(picsCol, k)).catch(function(){});
+    });
+    if (changed) savePics();
+  }
+
+  /* ---------- Sincronización con Firebase ---------- */
+  var docRef = null, picsCol = null, saving = false, dirty = false, timer = null, unsubs = [];
+  var syncEl = document.getElementById("sync");
+  function setSync(t){ syncEl.textContent = t; }
+
+  function queueSave(){
+    if (!docRef) return;
+    dirty = true; clearTimeout(timer); timer = setTimeout(flush, 500);
+  }
+  function flush(){
+    if (saving || !dirty || !docRef) return;
+    saving = true; dirty = false; setSync(navigator.onLine ? "Guardando…" : "Sin conexión");
+    setDoc(docRef, JSON.parse(JSON.stringify(state))).then(function(){ setSync("Sincronizada"); },
+      function(e){ setSync(e && e.code === "permission-denied" ? "Sin permiso" : "Sin conexión"); })
+    .then(function(){ saving = false; if (dirty) flush(); });
+  }
+  function commit(){ state.updatedAt = Date.now(); prunePics(); saveLocal(); render(); queueSave(); }
+  window.addEventListener("online", function(){ if (docRef) setSync("Sincronizada"); });
+  window.addEventListener("offline", function(){ setSync("Sin conexión"); });
+
+  var CFG = window.CONFIG && window.CONFIG.firebase, fs = null, auth = null;
+  var gate = document.getElementById("gate"), gateText = document.getElementById("gateText"),
+      gateForm = document.getElementById("gateForm"), gateErr = document.getElementById("gateErr"),
+      emailEl = document.getElementById("email"), passEl = document.getElementById("pass"),
+      loginBtn = document.getElementById("loginBtn");
+
+  function startSync(){
+    docRef = doc(fs, "listas", "principal");
+    picsCol = collection(fs, "fotos");
+    setSync("Conectando…");
+    unsubs.push(onSnapshot(picsCol, function(qs){
+      var ch = false;
+      qs.docs.forEach(function(d){ var v = d.data(); if (v && okPic(v.d) && photos[d.id] !== v.d){ photos[d.id] = v.d; ch = true; } });
+      if (ch){ savePics(); render(); }
+    }, function(){}));
+    unsubs.push(onSnapshot(docRef, function(snap){
+      if (dirty || saving) return;
+      if (!snap.exists()){
+        if (state.items.length || Object.keys(state.freq).length) queueSave(); else setSync("Sincronizada");
+        return;
+      }
+      var remote = clean(JSON.parse(JSON.stringify(snap.data())));
+      if (remote.updatedAt > state.updatedAt){ state = remote; saveLocal(); render(); }
+      else if (remote.updatedAt < state.updatedAt) queueSave();
+      setSync(snap.metadata.fromCache ? "Sin conexión" : "Sincronizada");
+    }, function(e){
+      setSync(e && e.code === "permission-denied" ? "Sin permiso" : "Sin conexión");
+      if (e && e.code === "permission-denied") say("Esta cuenta no tiene permiso para la lista. Revisa las reglas de Firestore.");
+    }));
+  }
+  function stopSync(){
+    unsubs.forEach(function(u){ try { u(); } catch(e){} }); unsubs = [];
+    docRef = null; picsCol = null;
+  }
+
+  if (!CFG || !CFG.apiKey || /PEGA/.test(CFG.apiKey)){
+    gate.hidden = false; gateForm.hidden = true;
+    gateText.textContent = "Falta configurar Firebase: pega tus datos en el archivo config.js y vuelve a subirlo.";
+  } else {
+    var fbApp = initializeApp(CFG);
+    try { fs = initializeFirestore(fbApp, {localCache: persistentLocalCache({tabManager: persistentSingleTabManager()})}); }
+    catch(e){ fs = getFirestore(fbApp); }
+    auth = getAuth(fbApp);
+    onAuthStateChanged(auth, function(u){
+      if (u){ gate.hidden = true; if (!docRef) startSync(); }
+      else { stopSync(); gate.hidden = false; gateForm.hidden = false; setSync(""); }
+    });
+  }
+  function login(){
+    if (!auth) return;
+    var em = emailEl.value.trim(), pw = passEl.value;
+    if (!em || !pw){ gateErr.textContent = "Escribe tu correo y tu contraseña."; return; }
+    loginBtn.disabled = true; gateErr.textContent = "";
+    signInWithEmailAndPassword(auth, em, pw).then(function(){ passEl.value = ""; }, function(e){
+      var c = e && e.code || "";
+      gateErr.textContent = /invalid|wrong-password|user-not-found/.test(c) ? "El correo o la contraseña no son correctos."
+        : /too-many/.test(c) ? "Demasiados intentos. Espera unos minutos."
+        : /network/.test(c) ? "No hay conexión. Conéctate a internet para entrar."
+        : "No he podido entrar (" + c + ").";
+    }).then(function(){ loginBtn.disabled = false; });
+  }
+  loginBtn.addEventListener("click", login);
+  passEl.addEventListener("keydown", function(e){ if (e.key === "Enter"){ e.preventDefault(); login(); } });
+
+  /* ---------- Acciones ---------- */
+  function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+  function addItem(text, note, cat){
+    var name = String(text).replace(/\s+/g," ").trim().slice(0,80);
+    if (!name) return;
+    note = String(note || "").replace(/\s+/g," ").trim().slice(0,60);
+    cat = cat && catInfo(cat).id === cat ? cat : catOf(name);
+    name = name.charAt(0).toUpperCase() + name.slice(1);
+    var key = norm(name), found = null;
+    state.items.forEach(function(i){ if (i.store === store && norm(i.name) === key) found = i; });
+    if (found){
+      if (found.done) { found.done = false; found.qty = 1; } else found.qty = Math.min(99, found.qty + 1);
+      lastAdded = found.id;
+    } else {
+      var it = {id:uid(), name:name, note:note, store:store, qty:1, done:false, cat:cat};
+      state.items.push(it); lastAdded = it.id;
+    }
+    var f = state.freq[key] || {label:name, n:0, note:note, cat:cat, st:{}}; if (f.st) f.st[store] = true; f.n++; state.freq[key] = f;
+    commit();
+    return found ? found.id : it.id;
+  }
+  // Guarda un producto como habitual de una tienda sin apuntarlo como pendiente.
+  function addUsual(text, note, cat, st){
+    var name = String(text).replace(/\s+/g," ").trim().slice(0,80);
+    name = name.charAt(0).toUpperCase() + name.slice(1);
+    var key = norm(name), f = state.freq[key];
+    if (!f) f = state.freq[key] = {label:name, n:0, st:{},
+      note:String(note || "").replace(/\s+/g," ").trim().slice(0,60),
+      cat:cat && catInfo(cat).id === cat ? cat : catOf(name)};
+    if (f.st) f.st[st] = true;
+    f.n = Math.max(1, f.n);
+    return key;
+  }
+  function usualKeys(st){
+    return Object.keys(state.freq).filter(function(k){ var f = state.freq[k]; return !f.st || f.st[st]; });
+  }
+  function dropUsual(key, st){
+    var f = state.freq[key]; if (!f) return;
+    if (!f.st) f.st = {mercadona:true, consum:true};
+    f.st[st] = false;
+    if (!f.st.mercadona && !f.st.consum) delete state.freq[key];
+  }
+  function find(id){ for (var i=0;i<state.items.length;i++) if (state.items[i].id===id) return state.items[i]; return null; }
+
+  /* ---------- Pintado ---------- */
+  function h(tag, attrs){
+    var el = document.createElement(tag), k;
+    for (k in (attrs || {})){
+      if (k === "text") el.textContent = attrs[k];
+      else if (k === "on") for (var ev in attrs.on) el.addEventListener(ev, attrs.on[ev]);
+      else if (attrs[k] !== false && attrs[k] != null) el.setAttribute(k, attrs[k]);
+    }
+    for (var i=2;i<arguments.length;i++) if (arguments[i]) el.appendChild(arguments[i]);
+    return el;
+  }
+
+  var listEl = document.getElementById("list"), chipsEl = document.getElementById("chips"),
+      input = document.getElementById("input"), summaryEl = document.getElementById("summary");
+
+  function rowEl(it){
+    var other = it.store === "mercadona" ? "consum" : "mercadona";
+    var li = h("li", {"class":(it.done ? "done" : "") + (it.id === lastAdded ? " new" : "")});
+    var row = h("div", {"class":"row"},
+      h("button", {type:"button","class":"tick","aria-pressed":String(it.done),
+          on:{click:function(){ it.done = !it.done; openId = null; commit(); }}},
+        h("span", {"class":"box"}),
+        photos[it.id] ? h("img", {"class":"thumb", src:photos[it.id], alt:""}) : null,
+        h("span", {"class":"txt"}, h("span", {"class":"name", text:it.name}), it.note ? h("span", {"class":"note", text:it.note}) : null),
+        it.qty > 1 ? h("span", {"class":"qty", text:"×" + it.qty}) : null),
+      h("button", {type:"button","class":"more","aria-label":"Opciones de " + it.name,"aria-expanded":String(openId===it.id), text:"⋯",
+          on:{click:function(){ openId = openId === it.id ? null : it.id; render(); }}}));
+    li.appendChild(row);
+    if (openId === it.id){
+      li.appendChild(h("div", {"class":"acts"},
+        photos[it.id] ? h("img", {"class":"big", src:photos[it.id], alt:"Foto de " + it.name}) : null,
+        h("button", {type:"button","class":"step","aria-label":"Una unidad menos", text:"−",
+          on:{click:function(){ if (it.qty > 1){ it.qty--; commit(); } }}}),
+        h("span", {"class":"n", text:String(it.qty)}),
+        h("button", {type:"button","class":"step","aria-label":"Una unidad más", text:"+",
+          on:{click:function(){ if (it.qty < 99){ it.qty++; commit(); } }}}),
+        h("button", {type:"button", text:"Pasar a " + STORES[other],
+          on:{click:function(){ it.store = other; openId = null; commit(); }}}),
+        h("button", {type:"button", text:photos[it.id] ? "Cambiar foto" : "Poner foto",
+          on:{click:function(){ picTarget = it.id; picFile.value = ""; picFile.click(); }}}),
+        h("button", {type:"button","class":"del", text:"Quitar",
+          on:{click:function(){ state.items = state.items.filter(function(x){ return x.id !== it.id; }); openId = null; commit(); }}})));
+    }
+    return li;
+  }
+
+  function render(){
+    document.body.dataset.store = store;
+
+    // Selector y resumen
+    var pending = {mercadona:0, consum:0};
+    state.items.forEach(function(i){ if (!i.done) pending[i.store]++; });
+    document.querySelectorAll(".switch button").forEach(function(b){
+      var s = b.dataset.store;
+      b.setAttribute("aria-pressed", String(s === store));
+      b.querySelector(".count").textContent = pending[s];
+    });
+    var n = pending[store];
+    summaryEl.textContent = n === 0 ? "Nada pendiente en " + STORES[store]
+      : n + (n === 1 ? " producto por comprar en " : " productos por comprar en ") + STORES[store];
+
+    // Lista
+    listEl.textContent = "";
+    var mine = state.items.filter(function(i){ return i.store === store; });
+    var todo = mine.filter(function(i){ return !i.done; }), done = mine.filter(function(i){ return i.done; });
+
+    if (!mine.length){
+      listEl.appendChild(h("div", {"class":"empty"},
+        h("strong", {text:"No falta nada en " + STORES[store]}),
+        h("span", {text:"Escribe abajo lo que se ha acabado o toca un producto habitual."})));
+    }
+    CATS.concat([OTHER]).forEach(function(c){
+      var rows = todo.filter(function(i){ return catInfo(i.cat).id === c.id; });
+      if (!rows.length) return;
+      listEl.appendChild(h("h2", null, h("span", {text:c.icon + " " + c.name})));
+      var ul = h("ul"); rows.forEach(function(i){ ul.appendChild(rowEl(i)); }); listEl.appendChild(ul);
+    });
+    if (done.length){
+      listEl.appendChild(h("h2", null, h("span", {text:"En el carro"}),
+        h("button", {type:"button","class":"link", text:"Vaciar carro",
+          on:{click:function(){ state.items = state.items.filter(function(i){ return !(i.store === store && i.done); }); openId = null; commit(); }}})));
+      var ul2 = h("ul"); done.forEach(function(i){ ul2.appendChild(rowEl(i)); }); listEl.appendChild(ul2);
+    }
+    lastAdded = null;
+    renderChips();
+  }
+
+  function renderChips(){
+    var q = norm(input.value), seen = {}, pool = [];
+    var inList = {};
+    state.items.forEach(function(i){ if (i.store === store && !i.done) inList[norm(i.name)] = true; });
+    usualKeys(store).forEach(function(k){ pool.push({key:k, label:state.freq[k].label, n:state.freq[k].n, note:state.freq[k].note, cat:state.freq[k].cat}); seen[k] = true; });
+    pool.sort(function(a,b){ return b.n - a.n; });
+    DEFAULTS.forEach(function(d){ var k = norm(d); if (!seen[k]) pool.push({key:k, label:d, n:0}); });
+    var shown = pool.filter(function(p){
+      if (inList[p.key]) return false;
+      return !q || (" " + p.key).indexOf(" " + q) !== -1;
+    }).slice(0, 14);
+    chipsEl.textContent = "";
+    if (!q && usualKeys(store).length){
+      chipsEl.appendChild(h("button", {type:"button","class":"chip star", text:"★ Mis habituales",
+        on:{click:function(){ openUsuals(null, "Habituales de " + STORES[store], "Toca un producto para apuntarlo como pendiente. Con × lo quitas de tus habituales."); }}}));
+    }
+    shown.forEach(function(p){
+      chipsEl.appendChild(h("button", {type:"button","class":"chip", text:"+ " + p.label,
+        on:{click:function(){
+          input.value = "";
+          if (p.n === 0 && aiOn()) openSheet(p.label); else addItem(p.label, p.note, p.cat);
+          renderChips();
+        }}}));
+    });
+    chipsEl.style.display = chipsEl.childNodes.length ? "" : "none";
+  }
+
+  /* ---------- Eventos ---------- */
+  document.querySelectorAll(".switch button").forEach(function(b){
+    b.addEventListener("click", function(){
+      store = b.dataset.store; openId = null;
+      try { localStorage.setItem(LS_STORE, store); } catch(e){}
+      render();
+    });
+  });
+  function submit(){
+    var q = input.value.replace(/\s+/g," ").trim();
+    if (!q) { input.focus(); return; }
+    input.value = ""; renderChips();
+    if (aiOn()) { input.blur(); openSheet(q); } else { addItem(q); input.focus(); }
+  }
+
+  /* ---------- Gemini: buscar marcas y leer fotos ---------- */
+  var LS_AI = "lista-compra-gemini", ai = {key:"", model:"gemini-flash-latest"};
+  try { var ra = JSON.parse(localStorage.getItem(LS_AI) || "{}"); if (typeof ra.key === "string") ai.key = ra.key; if (ra.model) ai.model = String(ra.model); } catch(e){}
+  function aiOn(){ return !!ai.key; }
+  var CAT_IDS = CATS.map(function(c){ return c.id; }).concat(["otros"]);
+  var BRANDS = {mercadona:"Hacendado, Deliplus, Bosque Verde, Compy", consum:"Consum, Consum Eco, Kyrey"};
+  var SITES = {mercadona:"tienda.mercadona.es", consum:"tienda.consum.es"};
+  var camBtn = document.getElementById("camBtn"), camFile = document.getElementById("camFile");
+  function syncAiUi(){ camBtn.hidden = !aiOn(); }
+  syncAiUi();
+
+  function parseJSON(t){
+    try { return JSON.parse(t); } catch(e){}
+    var m = t.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (m) try { return JSON.parse(m[1]); } catch(e){}
+    var a = t.search(/[\[{]/), b = Math.max(t.lastIndexOf("]"), t.lastIndexOf("}"));
+    if (a >= 0 && b > a) try { return JSON.parse(t.slice(a, b + 1)); } catch(e){}
+    throw {code:"invalid_json"};
+  }
+  // Devuelve {data, entry}; entry es el HTML de sugerencias de Google cuando se usa la búsqueda web.
+  function gemini(prompt, opts){
+    opts = opts || {};
+    var parts = [{text:prompt}];
+    if (opts.image) parts.push({inline_data:{mime_type:"image/jpeg", data:opts.image}});
+    var body = {contents:[{role:"user", parts:parts}], generationConfig:{temperature:0.2}};
+    if (opts.search) body.tools = [{google_search:{}}];
+    else body.generationConfig.responseMimeType = "application/json";
+    var url = "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(ai.model) + ":generateContent";
+    return fetch(url, {method:"POST", signal:opts.signal,
+      headers:{"Content-Type":"application/json", "x-goog-api-key":ai.key}, body:JSON.stringify(body)})
+    .then(function(r){
+      return r.json().catch(function(){ return {}; }).then(function(d){
+        if (!r.ok){
+          var msg = JSON.stringify(d || {});
+          throw {code: r.status === 429 ? "rate_limited"
+            : (r.status === 401 || r.status === 403 || /API key|API_KEY/i.test(msg)) ? "bad_key"
+            : r.status === 404 ? "bad_model" : "error"};
+        }
+        var c0 = d.candidates && d.candidates[0], txt = "";
+        if (c0 && c0.content && c0.content.parts) c0.content.parts.forEach(function(p){ if (p.text && !p.thought) txt += p.text; });
+        if (!txt) throw {code:"empty"};
+        var gm = c0.groundingMetadata, entry = gm && gm.searchEntryPoint && gm.searchEntryPoint.renderedContent;
+        return {data:parseJSON(txt), entry:entry || ""};
+      });
+    }, function(e){ throw {code: e && e.name === "AbortError" ? "cancelled" : "network"}; });
+  }
+  function aiError(e, what){
+    var c = e && e.code;
+    return c === "bad_key" ? "La clave de Gemini no funciona. Revísala en Ajustes (⚙︎)."
+      : c === "bad_model" ? "Ese modelo de Gemini no existe. Cámbialo en Ajustes (⚙︎)."
+      : c === "rate_limited" ? "Has llegado al límite de uso de Gemini. Espera un poco y repite."
+      : c === "network" ? "No hay conexión a internet."
+      : "No he podido " + what + " ahora.";
+  }
+  function blobB64(b){
+    return new Promise(function(res, rej){ var fr = new FileReader();
+      fr.onload = function(){ res(String(fr.result).split(",")[1]); }; fr.onerror = rej; fr.readAsDataURL(b); });
+  }
+
+  /* Ajustes */
+  function openSettings(){
+    if (searchCtl) searchCtl.abort();
+    searchCtl = null; searchSeq++;
+    sheetTitle.textContent = "Ajustes"; sheetBody.textContent = "";
+    var keyIn = h("input", {type:"password", autocomplete:"off", autocapitalize:"off", spellcheck:"false", placeholder:"Pega aquí tu clave de Google AI Studio"});
+    keyIn.value = ai.key;
+    var modelIn = h("input", {type:"text", autocomplete:"off", autocapitalize:"off", spellcheck:"false"});
+    modelIn.value = ai.model;
+    var msg = h("p", {"class":"small", role:"status"});
+    var user = auth && auth.currentUser;
+    sheetBody.appendChild(h("label", {"class":"field"}, h("span", {text:"Clave de Gemini"}), keyIn));
+    sheetBody.appendChild(h("label", {"class":"field"}, h("span", {text:"Modelo"}), modelIn));
+    sheetBody.appendChild(h("button", {type:"button","class":"btn", text:"Guardar", on:{click:function(){
+      ai.key = keyIn.value.trim(); ai.model = modelIn.value.trim() || "gemini-flash-latest";
+      try { localStorage.setItem(LS_AI, JSON.stringify(ai)); } catch(e){}
+      searchCache = {}; syncAiUi();
+      msg.textContent = ai.key ? "Guardado. Ya puedes buscar marcas y usar la cámara." : "Guardado. Sin clave, la app funciona sin búsqueda de marcas ni cámara.";
+    }}}));
+    sheetBody.appendChild(msg);
+    sheetBody.appendChild(h("p", {"class":"small", text:"La clave se guarda solo en este móvil. Cada persona la pega en su propio móvil."}));
+    if (user){
+      sheetBody.appendChild(h("p", {"class":"small", text:"Has entrado como " + (user.email || "usuario") + "."}));
+      sheetBody.appendChild(h("button", {type:"button","class":"btn ghost", text:"Cerrar sesión", on:{click:function(){
+        closeSheet();
+        state = {items:[], freq:{}, updatedAt:0}; photos = {};
+        try { localStorage.removeItem(LS); localStorage.removeItem(LS_PICS); } catch(e){}
+        render(); signOut(auth);
+      }}}));
+    }
+    veil.hidden = false;
+  }
+  document.getElementById("gearBtn").addEventListener("click", openSettings);
+
+  /* Hoja de resultados */
+  var veil = document.getElementById("veil"), sheetBody = document.getElementById("sheetBody"),
+      sheetTitle = document.getElementById("sheetTitle"), sheetClose = document.getElementById("sheetClose");
+  var searchCtl = null, searchSeq = 0, searchCache = {};
+
+  function pickRow(name, note, cat){
+    var btn = h("button", {type:"button","class":"pick"},
+      h("span", {"class":"plus", text:"+"}),
+      h("span", {"class":"txt"}, h("span", {"class":"name", text:name}), note ? h("span", {"class":"note", text:note}) : null));
+    btn.addEventListener("click", function(){
+      addItem(name, note, cat);
+      btn.classList.add("added"); btn.querySelector(".plus").textContent = "✓";
+    });
+    return h("li", null, btn);
+  }
+
+  function closeSheet(){
+    if (searchCtl) searchCtl.abort();
+    searchCtl = null; searchSeq++; veil.hidden = true;
+  }
+  sheetClose.addEventListener("click", closeSheet);
+  veil.addEventListener("click", function(e){ if (e.target === veil) closeSheet(); });
+  document.addEventListener("keydown", function(e){ if (e.key === "Escape" && !veil.hidden) closeSheet(); });
+
+  function openUsuals(keys, title, hint){
+    if (searchCtl) searchCtl.abort();
+    searchCtl = null; searchSeq++;
+    var st = store, seen = {}, pending = {};
+    keys = (keys || usualKeys(st)).filter(function(k){ if (seen[k] || !state.freq[k]) return false; seen[k] = true; return true; });
+    state.items.forEach(function(i){ if (i.store === st && !i.done) pending[norm(i.name)] = true; });
+    sheetTitle.textContent = title; sheetBody.textContent = "";
+    sheetBody.appendChild(h("p", {"class":"hint", text:hint}));
+    CATS.concat([OTHER]).forEach(function(c){
+      var ks = keys.filter(function(k){ var f = state.freq[k]; return catInfo(f.cat || catOf(f.label)).id === c.id; })
+        .sort(function(a,b){ return state.freq[a].label.localeCompare(state.freq[b].label, "es"); });
+      if (!ks.length) return;
+      sheetBody.appendChild(h("h2", null, h("span", {text:c.icon + " " + c.name})));
+      var ul = h("ul");
+      ks.forEach(function(k){
+        var f = state.freq[k], li = pickRow(f.label, f.note, f.cat);
+        li.className = "row";
+        if (pending[k]){ var b = li.querySelector(".pick"); b.classList.add("added"); b.querySelector(".plus").textContent = "✓"; }
+        li.appendChild(h("button", {type:"button","class":"more","aria-label":"Quitar " + f.label + " de habituales", text:"×",
+          on:{click:function(){ dropUsual(k, st); commit(); li.remove(); if (!ul.children.length){ ul.previousSibling.remove(); ul.remove(); } }}}));
+        ul.appendChild(li);
+      });
+      sheetBody.appendChild(ul);
+    });
+    veil.hidden = false; sheetClose.focus();
+  }
+
+  function openSheet(q){
+    var my = ++searchSeq, st = store, key = st + "|" + norm(q);
+    var label = q.charAt(0).toUpperCase() + q.slice(1);
+    sheetTitle.textContent = "«" + label + "» en " + STORES[st];
+    sheetBody.textContent = "";
+    sheetBody.appendChild(h("ul", null, pickRow(label, "Tal cual, sin marca concreta", null)));
+    var status = h("p", {"class":"hint", text:"Buscando marcas y variedades…"});
+    sheetBody.appendChild(status);
+    veil.hidden = false; sheetClose.focus();
+
+    function show(list){
+      var ul = h("ul"), n = 0;
+      (Array.isArray(list) ? list : []).slice(0, 30).forEach(function(r){
+        if (!r || typeof r.nombre !== "string" || !r.nombre.trim()) return;
+        ul.appendChild(pickRow(r.nombre, typeof r.formato === "string" ? r.formato : "", r.categoria)); n++;
+      });
+      if (!n){ status.textContent = "No conozco productos concretos para esta búsqueda. Puedes añadirla tal cual."; return; }
+      status.textContent = "Resultados de Gemini buscando en internet. Pueden faltar productos o no estar en tu tienda de Almería.";
+      sheetBody.insertBefore(ul, status);
+    }
+    function showEntry(html){
+      if (!html) return;
+      sheetBody.appendChild(h("iframe", {"class":"grounding", title:"Búsquedas de Google relacionadas", sandbox:"allow-popups allow-popups-to-escape-sandbox", srcdoc:html}));
+    }
+    if (searchCache[key]) { show(searchCache[key].data); showEntry(searchCache[key].entry); return; }
+
+    function run(){
+      if (searchCtl) searchCtl.abort();
+      searchCtl = new AbortController();
+      status.textContent = "Buscando marcas y variedades…";
+      var prompt = "Eres el buscador de una app de lista de la compra en España. Supermercado: " + STORES[st] +
+        ". El usuario busca: «" + q.slice(0,80) + "».\n" +
+        "Busca en internet, sobre todo en " + SITES[st] + ", qué productos concretos relacionados con la búsqueda vende ese supermercado en España (la tienda está en Almería). " +
+        "Enumera hasta 24. " +
+        "Primero los de su marca propia (" + BRANDS[st] + "), después otras marcas que suele tener. " +
+        "Incluye las variedades habituales (tipos, sabores, sin lactosa, integral, etc.). " +
+        "Si la búsqueda ya nombra un producto y marca concretos, ponlo el primero. " +
+        "Incluye solo productos de los que estés razonablemente seguro; no inventes productos ni precios.\n" +
+        "Responde solo con un array JSON de objetos {\"nombre\": nombre del producto con su marca, \"formato\": envase o tamaño habitual o \"\", " +
+        "\"categoria\": uno de " + JSON.stringify(CAT_IDS) + "}. " +
+        "Ejemplo: [{\"nombre\":\"Tortitas de arroz Hacendado\",\"formato\":\"Paquete 130 g\",\"categoria\":\"despensa\"}]";
+      var sig = searchCtl.signal;
+      gemini(prompt, {search:true, signal:sig}).catch(function(e){
+        // Si la búsqueda web no está disponible para esta clave o modelo, se pregunta sin ella.
+        if (e && (e.code === "cancelled" || e.code === "bad_key" || e.code === "network" || e.code === "bad_model")) throw e;
+        return gemini(prompt, {signal:sig});
+      }).then(function(r){
+        if (my !== searchSeq) return;
+        searchCache[key] = r; show(r.data); showEntry(r.entry);
+      }, function(e){
+        if (my !== searchSeq || (e && e.code === "cancelled")) return;
+        status.textContent = aiError(e, "buscar") + " ";
+        status.appendChild(h("button", {type:"button", text:"Reintentar", on:{click:run}}));
+      });
+    }
+    run();
+  }
+
+  /* Aviso con deshacer */
+  var toast = document.getElementById("toast"), toastText = document.getElementById("toastText"),
+      toastUndo = document.getElementById("toastUndo"), toastTimer = null, undoState = null;
+  function say(msg, undo, keep){
+    clearTimeout(toastTimer);
+    toastText.textContent = msg; undoState = undo || null; toastUndo.hidden = !undo; toast.hidden = false;
+    if (!keep) toastTimer = setTimeout(function(){ toast.hidden = true; undoState = null; }, undo ? 8000 : 5000);
+  }
+  toastUndo.addEventListener("click", function(){
+    if (!undoState) return;
+    var prev = clean(JSON.parse(undoState)); state.items = prev.items; state.freq = prev.freq;
+    undoState = null; toast.hidden = true; commit();
+  });
+
+  /* Foto del producto o de la etiqueta */
+  function shrink(file, max){
+    function draw(src, w, h0){
+      var k = Math.min(1, (max || 2000) / Math.max(w, h0)), cv = document.createElement("canvas");
+      cv.width = Math.round(w * k); cv.height = Math.round(h0 * k);
+      cv.getContext("2d").drawImage(src, 0, 0, cv.width, cv.height);
+      return new Promise(function(res, rej){ cv.toBlob(function(b){ b ? res(b) : rej(new Error("blob")); }, "image/jpeg", max ? 0.72 : 0.85); });
+    }
+    return new Promise(function(res, rej){
+      var url = URL.createObjectURL(file), img = new Image();
+      img.onload = function(){ draw(img, img.naturalWidth, img.naturalHeight).then(res, rej).then(function(){ URL.revokeObjectURL(url); }); };
+      img.onerror = function(){ URL.revokeObjectURL(url); rej(new Error("img")); };
+      img.src = url;
+    });
+  }
+  camBtn.addEventListener("click", function(){ camFile.value = ""; camFile.click(); });
+  function thumbOf(file){
+    return shrink(file, 360).then(function(b){ return new Promise(function(res, rej){
+      var fr = new FileReader(); fr.onload = function(){ res(String(fr.result)); }; fr.onerror = rej; fr.readAsDataURL(b);
+    }); });
+  }
+  var picFile = document.getElementById("picFile"), picTarget = null;
+  picFile.addEventListener("change", function(){
+    var file = picFile.files && picFile.files[0], id = picTarget;
+    if (!file || !id) return;
+    thumbOf(file).then(function(d){ if (find(id)) setPhoto(id, d); }, function(){ say("No he podido usar esa foto. Prueba con otra."); });
+  });
+  camFile.addEventListener("change", function(){
+    var file = camFile.files && camFile.files[0];
+    if (!file || !aiOn()) return;
+    var st = store;
+    camBtn.disabled = true; say("Mirando la foto…", null, true);
+    shrink(file).then(function(blob){
+      var prompt = "La foto viene de una app de lista de la compra en España. Puede mostrar (a) un producto de supermercado o su etiqueta, o (b) un ticket de compra.\n" +
+        "Si es un producto: lee la marca y el nombre que se vean en el envase.\n" +
+        "Si es un ticket: lista cada producto comprado una sola vez, con un nombre legible en minúsculas normales, expandiendo las abreviaturas evidentes " +
+        "(por ejemplo «LECHE SEMI S/LACT» pasa a «Leche semidesnatada sin lactosa»). No añadas marcas que no estén impresas. " +
+        "Omite bolsas, descuentos, totales, impuestos y formas de pago. Indica la tienda si el ticket lo dice.\n" +
+        "No inventes nada que no se vea en la foto.\n" +
+        "Responde solo con un objeto JSON {\"tipo\": \"producto\" | \"ticket\" | \"nada\", \"tienda\": \"mercadona\" | \"consum\" | \"otra\" | \"\", " +
+        "\"productos\": [{\"nombre\": nombre del producto, \"formato\": tamaño o envase si se ve o \"\", \"categoria\": uno de " + JSON.stringify(CAT_IDS) + "}]}. " +
+        "Para un producto suelto, \"productos\" lleva un solo elemento.";
+      return blobB64(blob).then(function(b64){ return gemini(prompt, {image:b64}); });
+    }).then(function(res){
+      var r = res.data;
+      var list = (r && Array.isArray(r.productos) ? r.productos : []).filter(function(p){
+        return p && typeof p.nombre === "string" && p.nombre.trim();
+      }).slice(0, 80);
+      if (!r || r.tipo === "nada" || !list.length){
+        say("No he reconocido ningún producto. Prueba con otra foto más cerca y con buena luz."); return;
+      }
+      if (r.tipo === "ticket"){
+        var tst = STORES[r.tienda] ? r.tienda : st, keys = [];
+        list.forEach(function(p){ keys.push(addUsual(p.nombre, typeof p.formato === "string" ? p.formato : "", p.categoria, tst)); });
+        store = tst; try { localStorage.setItem(LS_STORE, store); } catch(e){}
+        commit(); toast.hidden = true;
+        openUsuals(keys, "Ticket de " + STORES[tst],
+          "He guardado " + keys.length + (keys.length === 1 ? " producto" : " productos") + " en tus habituales de " + STORES[tst] +
+          ". Toca los que falten ahora para apuntarlos. Si alguno está mal leído, quítalo con ×.");
+        return;
+      }
+      var one = list[0], before = JSON.stringify(state), prevStore = store;
+      store = st; var newId = addItem(one.nombre, typeof one.formato === "string" ? one.formato : "", one.categoria); store = prevStore; render();
+      thumbOf(file).then(function(d){ if (find(newId)) setPhoto(newId, d); }, function(){});
+      say("Añadido a " + STORES[st] + ": " + one.nombre.trim().slice(0,80), before);
+    }, function(e){
+      if (e && e.code && e.code !== "error" && e.code !== "empty" && e.code !== "invalid_json") say(aiError(e, "leer la foto"));
+      else say("No he podido leer la foto. Si es un ticket muy largo, hazlo en dos fotos.");
+    }).then(function(){ camBtn.disabled = false; });
+  });
+  document.getElementById("addBtn").addEventListener("click", submit);
+  input.addEventListener("keydown", function(e){ if (e.key === "Enter"){ e.preventDefault(); submit(); } });
+  input.addEventListener("input", renderChips);
+
+  render();
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(function(){});
+})();
+</script>
+</body>
+</html>
