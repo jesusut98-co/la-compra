@@ -1,5 +1,5 @@
 // Permite abrir la app sin conexión. Cambia el número para forzar una actualización.
-const CACHE = "la-compra-v4";
+const CACHE = "la-compra-v5";
 const SHELL = ["./", "index.html", "config.js", "manifest.webmanifest", "icon-180.png", "icon-192.png", "icon-512.png"];
 
 self.addEventListener("install", e => {
