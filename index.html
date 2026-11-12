@@ -71,6 +71,11 @@ h1{font-size:2.5rem;font-weight:800;letter-spacing:-.03em;line-height:1;margin:0
 .btn.ghost{background:var(--surface);color:var(--ink);border:1px solid var(--line);margin-top:10px}
 .err{color:var(--danger);font-size:.92rem;min-height:1.3em;margin:4px 4px 10px}
 .small{font-size:.85rem;color:var(--muted);margin:12px 4px 0}
+.pr{flex:none;display:flex;flex-direction:column;align-items:flex-end;text-align:right;line-height:1.2}
+.pr b{font-weight:600}
+.pr small{font-size:.78rem;color:var(--muted)}
+.code{font-size:1.25rem;font-weight:800;letter-spacing:.06em;margin:4px 4px 12px;user-select:all;-webkit-user-select:all}
+.btn.link2{background:none;color:var(--accent);padding:10px;margin-top:4px;font-size:.95rem}
 .grounding{width:100%;height:96px;border:0;margin-top:8px;border-radius:12px;background:transparent}
 
 /* Selector de tienda */
@@ -201,13 +206,8 @@ li + li{border-top:1px solid var(--line)}
 <div class="gate" id="gate" hidden>
   <div class="gate-in">
     <h1>La compra</h1>
-    <p id="gateText">Entra con tu cuenta para ver la lista compartida.</p>
-    <div id="gateForm">
-      <label class="field"><span>Correo</span><input id="email" type="email" autocomplete="username" autocapitalize="off" inputmode="email"></label>
-      <label class="field"><span>Contraseña</span><input id="pass" type="password" autocomplete="current-password"></label>
-      <p class="err" id="gateErr" role="alert"></p>
-      <button type="button" class="btn" id="loginBtn">Entrar</button>
-    </div>
+    <p id="gateText"></p>
+    <div id="gateBody"></div>
   </div>
 </div>
 
@@ -220,9 +220,9 @@ li + li{border-top:1px solid var(--line)}
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
-import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signOut } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import { initializeFirestore, getFirestore, persistentLocalCache, persistentSingleTabManager,
-         doc, collection, onSnapshot, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+         doc, collection, onSnapshot, getDoc, setDoc, updateDoc, deleteDoc, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
 (function(){
   "use strict";
@@ -319,7 +319,8 @@ import { initializeFirestore, getFirestore, persistentLocalCache, persistentSing
   function flush(){
     if (saving || !dirty || !docRef) return;
     saving = true; dirty = false; setSync(navigator.onLine ? "Guardando…" : "Sin conexión");
-    setDoc(docRef, JSON.parse(JSON.stringify(state))).then(function(){ setSync("Sincronizada"); },
+    var copy = JSON.parse(JSON.stringify(state));
+    updateDoc(docRef, {items:copy.items, freq:copy.freq, updatedAt:copy.updatedAt}).then(function(){ setSync("Sincronizada"); },
       function(e){ setSync(e && e.code === "permission-denied" ? "Sin permiso" : "Sin conexión"); })
     .then(function(){ saving = false; if (dirty) flush(); });
   }
@@ -328,14 +329,131 @@ import { initializeFirestore, getFirestore, persistentLocalCache, persistentSing
   window.addEventListener("offline", function(){ setSync("Sin conexión"); });
 
   var CFG = window.CONFIG && window.CONFIG.firebase, fs = null, auth = null;
+  var listId = null, userRef = null, LS_LIST = "lista-compra-id";
   var gate = document.getElementById("gate"), gateText = document.getElementById("gateText"),
-      gateForm = document.getElementById("gateForm"), gateErr = document.getElementById("gateErr"),
-      emailEl = document.getElementById("email"), passEl = document.getElementById("pass"),
-      loginBtn = document.getElementById("loginBtn");
+      gateBody = document.getElementById("gateBody");
+
+  function gateMsg(t){ gate.hidden = false; gateText.textContent = t; gateBody.textContent = ""; }
+  function field(label, attrs){
+    var i = h("input", attrs);
+    return {input:i, el:h("label", {"class":"field"}, h("span", {text:label}), i)};
+  }
+  function resetLocal(){
+    state = {items:[], freq:{}, updatedAt:0}; photos = {};
+    try { localStorage.removeItem(LS); localStorage.removeItem(LS_PICS); } catch(e){}
+    render();
+  }
+  function fmtCode(id){ return String(id).replace(/(.{4})(?=.)/g, "$1-"); }
+  function newCode(){
+    var abc = "ABCDEFGHJKMNPQRSTUVWXYZ23456789", a = new Uint8Array(10), out = "";
+    crypto.getRandomValues(a);
+    for (var i = 0; i < a.length; i++) out += abc.charAt(a[i] % abc.length);
+    return out;
+  }
+  function authError(x){
+    var c = x && x.code || "";
+    return /invalid-email/.test(c) ? "Ese correo no parece válido."
+      : /email-already/.test(c) ? "Ya existe una cuenta con ese correo. Pulsa «Ya tengo cuenta»."
+      : /weak-password/.test(c) ? "La contraseña debe tener al menos 6 caracteres."
+      : /invalid|wrong-password|user-not-found/.test(c) ? "El correo o la contraseña no son correctos."
+      : /too-many/.test(c) ? "Demasiados intentos. Espera unos minutos."
+      : /network/.test(c) ? "No hay conexión a internet."
+      : /operation-not-allowed/.test(c) ? "El acceso con correo y contraseña no está activado en Firebase."
+      : "No he podido completar la operación (" + c + ").";
+  }
+
+  // Pantalla de entrar o crear cuenta. mode: "in" (entrar) o "up" (cuenta nueva).
+  function showLogin(mode){
+    var up = mode === "up";
+    gateMsg(up ? "Crea tu cuenta. Después podrás crear tu lista o unirte a la de otra persona con su código."
+               : "Entra con tu cuenta para ver tu lista.");
+    var em = field("Correo", {type:"email", autocomplete:"username", autocapitalize:"off", inputmode:"email"}),
+        pw = field("Contraseña", {type:"password", autocomplete:up ? "new-password" : "current-password"}),
+        err = h("p", {"class":"err", role:"alert"}),
+        go = h("button", {type:"button","class":"btn", text:up ? "Crear cuenta" : "Entrar"});
+    function submit(){
+      var e = em.input.value.trim(), p = pw.input.value;
+      if (!e || !p){ err.textContent = "Escribe tu correo y tu contraseña."; return; }
+      if (up && p.length < 6){ err.textContent = "La contraseña debe tener al menos 6 caracteres."; return; }
+      go.disabled = true; err.textContent = "";
+      (up ? createUserWithEmailAndPassword : signInWithEmailAndPassword)(auth, e, p)
+        .catch(function(x){ err.textContent = authError(x); go.disabled = false; });
+    }
+    go.addEventListener("click", submit);
+    pw.input.addEventListener("keydown", function(e){ if (e.key === "Enter"){ e.preventDefault(); submit(); } });
+    gateBody.appendChild(em.el); gateBody.appendChild(pw.el); gateBody.appendChild(err); gateBody.appendChild(go);
+    gateBody.appendChild(h("button", {type:"button","class":"btn ghost", text:up ? "Ya tengo cuenta" : "Crear una cuenta nueva",
+      on:{click:function(){ showLogin(up ? "in" : "up"); }}}));
+    if (!up) gateBody.appendChild(h("button", {type:"button","class":"btn link2", text:"He olvidado la contraseña", on:{click:function(){
+      var e = em.input.value.trim();
+      if (!e){ err.textContent = "Escribe tu correo arriba y vuelve a pulsar aquí."; return; }
+      sendPasswordResetEmail(auth, e).then(function(){ err.textContent = "Si existe una cuenta con ese correo, te llegará un mensaje para cambiar la contraseña. Mira también en spam."; },
+        function(x){ err.textContent = authError(x); });
+    }}}));
+  }
+
+  // Pantalla para quien ya tiene cuenta pero aún no tiene lista.
+  function showSetup(msg){
+    gateMsg(msg || "Ya tienes cuenta. Ahora crea tu lista o únete a la de otra persona con el código que te haya pasado.");
+    var err = h("p", {"class":"err", role:"alert"}), u = auth.currentUser;
+    var mk = h("button", {type:"button","class":"btn", text:"Crear una lista nueva"});
+    var code = field("Código de otra persona", {type:"text", autocapitalize:"characters", autocomplete:"off", spellcheck:"false", placeholder:"XXXX-XXXX-XX"});
+    var jn = h("button", {type:"button","class":"btn ghost", text:"Unirme con este código"});
+    function busy(b){ mk.disabled = b; jn.disabled = b; }
+    mk.addEventListener("click", function(){
+      busy(true); err.textContent = "";
+      var id = newCode(), seed = JSON.parse(JSON.stringify(state));
+      seed.updatedAt = Date.now(); seed.miembros = [u.uid];
+      state.updatedAt = seed.updatedAt; saveLocal();
+      setDoc(doc(fs, "listas", id), seed).then(function(){ return setDoc(userRef, {lista:id}); }).then(function(){
+        enterList(id);
+        Object.keys(photos).forEach(function(k){ setDoc(doc(picsCol, k), {d:photos[k]}).catch(function(){}); });
+      }, function(x){
+        busy(false);
+        err.textContent = x && x.code === "permission-denied" ? "Firebase no lo permite. Hay que publicar las reglas nuevas de Firestore." : "No he podido crear la lista. ¿Hay conexión?";
+      });
+    });
+    jn.addEventListener("click", function(){
+      var id = code.input.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+      if (id.length < 8){ err.textContent = "Escribe el código completo."; return; }
+      busy(true); err.textContent = "";
+      updateDoc(doc(fs, "listas", id), {miembros:arrayUnion(u.uid)}).then(function(){
+        resetLocal();
+        return setDoc(userRef, {lista:id});
+      }).then(function(){ enterList(id); }, function(){
+        busy(false); err.textContent = "No encuentro ninguna lista con ese código. Revísalo.";
+      });
+    });
+    gateBody.appendChild(mk); gateBody.appendChild(h("p", {"class":"small", text:" "}));
+    gateBody.appendChild(code.el); gateBody.appendChild(jn); gateBody.appendChild(err);
+    gateBody.appendChild(h("button", {type:"button","class":"btn link2", text:"Cerrar sesión", on:{click:function(){ signOut(auth); }}}));
+  }
+
+  function enterList(id){
+    listId = id;
+    try { localStorage.setItem(LS_LIST, JSON.stringify({uid:auth.currentUser.uid, id:id})); } catch(e){}
+    gate.hidden = true; startSync();
+  }
+  function lostList(){
+    stopSync(); listId = null;
+    try { localStorage.removeItem(LS_LIST); } catch(e){}
+    if (userRef) setDoc(userRef, {lista:null}).catch(function(){});
+    resetLocal();
+    showSetup("Ya no tienes acceso a esa lista. Crea una nueva o únete a otra con su código.");
+  }
+  function leaveList(){
+    var ref = docRef, u = auth.currentUser;
+    stopSync(); listId = null;
+    try { localStorage.removeItem(LS_LIST); } catch(e){}
+    if (ref && u) updateDoc(ref, {miembros:arrayRemove(u.uid)}).catch(function(){});
+    if (userRef) setDoc(userRef, {lista:null}).catch(function(){});
+    resetLocal(); showSetup();
+  }
 
   function startSync(){
-    docRef = doc(fs, "listas", "principal");
-    picsCol = collection(fs, "fotos");
+    stopSync();
+    docRef = doc(fs, "listas", listId);
+    picsCol = collection(docRef, "fotos");
     setSync("Conectando…");
     unsubs.push(onSnapshot(picsCol, function(qs){
       var ch = false;
@@ -343,53 +461,43 @@ import { initializeFirestore, getFirestore, persistentLocalCache, persistentSing
       if (ch){ savePics(); render(); }
     }, function(){}));
     unsubs.push(onSnapshot(docRef, function(snap){
+      if (!snap.exists()){ if (!snap.metadata.fromCache) lostList(); return; }
       if (dirty || saving) return;
-      if (!snap.exists()){
-        if (state.items.length || Object.keys(state.freq).length) queueSave(); else setSync("Sincronizada");
-        return;
-      }
       var remote = clean(JSON.parse(JSON.stringify(snap.data())));
       if (remote.updatedAt > state.updatedAt){ state = remote; saveLocal(); render(); }
       else if (remote.updatedAt < state.updatedAt) queueSave();
       setSync(snap.metadata.fromCache ? "Sin conexión" : "Sincronizada");
     }, function(e){
-      setSync(e && e.code === "permission-denied" ? "Sin permiso" : "Sin conexión");
-      if (e && e.code === "permission-denied") say("Esta cuenta no tiene permiso para la lista. Revisa las reglas de Firestore.");
+      if (e && e.code === "permission-denied") lostList(); else setSync("Sin conexión");
     }));
   }
   function stopSync(){
     unsubs.forEach(function(u){ try { u(); } catch(e){} }); unsubs = [];
-    docRef = null; picsCol = null;
+    docRef = null; picsCol = null; dirty = false; clearTimeout(timer);
   }
 
   if (!CFG || !CFG.apiKey || /PEGA/.test(CFG.apiKey)){
-    gate.hidden = false; gateForm.hidden = true;
-    gateText.textContent = "Falta configurar Firebase: pega tus datos en el archivo config.js y vuelve a subirlo.";
+    gateMsg("Falta configurar Firebase: pega tus datos en el archivo config.js y vuelve a subirlo.");
   } else {
     var fbApp = initializeApp(CFG);
     try { fs = initializeFirestore(fbApp, {localCache: persistentLocalCache({tabManager: persistentSingleTabManager()})}); }
     catch(e){ fs = getFirestore(fbApp); }
     auth = getAuth(fbApp);
     onAuthStateChanged(auth, function(u){
-      if (u){ gate.hidden = true; if (!docRef) startSync(); }
-      else { stopSync(); gate.hidden = false; gateForm.hidden = false; setSync(""); }
+      stopSync();
+      if (!u){ userRef = null; listId = null; setSync(""); showLogin("in"); return; }
+      userRef = doc(fs, "usuarios", u.uid);
+      var cached = null;
+      try { cached = JSON.parse(localStorage.getItem(LS_LIST) || "null"); } catch(e){}
+      if (cached && cached.uid === u.uid && cached.id) enterList(cached.id);   // arranque rápido y sin conexión
+      else gateMsg("Cargando…");
+      getDoc(userRef).then(function(snap){
+        var id = snap.exists() && snap.data().lista;
+        if (id){ if (id !== listId){ if (listId) resetLocal(); enterList(id); } }
+        else { stopSync(); listId = null; try { localStorage.removeItem(LS_LIST); } catch(e){} showSetup(); }
+      }, function(){ if (!listId) showSetup("No he podido comprobar tu lista. Si no tienes conexión, vuelve a abrir la app cuando la tengas."); });
     });
   }
-  function login(){
-    if (!auth) return;
-    var em = emailEl.value.trim(), pw = passEl.value;
-    if (!em || !pw){ gateErr.textContent = "Escribe tu correo y tu contraseña."; return; }
-    loginBtn.disabled = true; gateErr.textContent = "";
-    signInWithEmailAndPassword(auth, em, pw).then(function(){ passEl.value = ""; }, function(e){
-      var c = e && e.code || "";
-      gateErr.textContent = /invalid|wrong-password|user-not-found/.test(c) ? "El correo o la contraseña no son correctos."
-        : /too-many/.test(c) ? "Demasiados intentos. Espera unos minutos."
-        : /network/.test(c) ? "No hay conexión. Conéctate a internet para entrar."
-        : "No he podido entrar (" + c + ").";
-    }).then(function(){ loginBtn.disabled = false; });
-  }
-  loginBtn.addEventListener("click", login);
-  passEl.addEventListener("keydown", function(e){ if (e.key === "Enter"){ e.preventDefault(); login(); } });
 
   /* ---------- Acciones ---------- */
   function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
@@ -568,7 +676,8 @@ import { initializeFirestore, getFirestore, persistentLocalCache, persistentSing
 
   /* ---------- Gemini: buscar marcas y leer fotos ---------- */
   var LS_AI = "lista-compra-gemini", ai = {key:"", model:"gemini-flash-latest"};
-  try { var ra = JSON.parse(localStorage.getItem(LS_AI) || "{}"); if (typeof ra.key === "string") ai.key = ra.key; if (ra.model) ai.model = String(ra.model); } catch(e){}
+  try { var ra = JSON.parse(localStorage.getItem(LS_AI) || "{}"); if (typeof ra.key === "string") ai.key = ra.key; if (ra.model) ai.model = String(ra.model);
+    if (Array.isArray(ra.models)) ai.models = ra.models.filter(function(m){ return typeof m === "string"; }); } catch(e){}
   function aiOn(){ return !!ai.key; }
   var CAT_IDS = CATS.map(function(c){ return c.id; }).concat(["otros"]);
   var BRANDS = {mercadona:"Hacendado, Deliplus, Bosque Verde, Compy", consum:"Consum, Consum Eco, Kyrey"};
@@ -586,14 +695,26 @@ import { initializeFirestore, getFirestore, persistentLocalCache, persistentSing
     throw {code:"invalid_json"};
   }
   // Devuelve {data, entry}; entry es el HTML de sugerencias de Google cuando se usa la búsqueda web.
-  function gemini(prompt, opts){
-    opts = opts || {};
+  var DEF_FALLBACK = ["gemini-flash-lite-latest", "gemini-2.5-flash", "gemini-2.5-flash-lite"], lastModel = "";
+  // Modelo elegido primero y, detrás, los de reserva por si está saturado.
+  function modelChain(){
+    var out = [ai.model];
+    (ai.models && ai.models.length ? ai.models : DEF_FALLBACK).forEach(function(m){ if (out.indexOf(m) === -1) out.push(m); });
+    return out.slice(0, 5);
+  }
+  function wait(ms, signal){
+    return new Promise(function(res, rej){
+      var t = setTimeout(res, ms);
+      if (signal) signal.addEventListener("abort", function(){ clearTimeout(t); rej({code:"cancelled"}); });
+    });
+  }
+  function geminiOnce(model, prompt, opts){
     var parts = [{text:prompt}];
     if (opts.image) parts.push({inline_data:{mime_type:"image/jpeg", data:opts.image}});
     var body = {contents:[{role:"user", parts:parts}], generationConfig:{temperature:0.2}};
     if (opts.search) body.tools = [{google_search:{}}];
     else body.generationConfig.responseMimeType = "application/json";
-    var url = "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(ai.model) + ":generateContent";
+    var url = "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent";
     return fetch(url, {method:"POST", signal:opts.signal,
       headers:{"Content-Type":"application/json", "x-goog-api-key":ai.key}, body:JSON.stringify(body)})
     .then(function(r){
@@ -601,7 +722,8 @@ import { initializeFirestore, getFirestore, persistentLocalCache, persistentSing
         if (!r.ok){
           var msg = JSON.stringify(d || {});
           throw {status:r.status, detail:String(d && d.error && d.error.message || "").slice(0, 220),
-            code: r.status === 429 ? "rate_limited"
+            code: (r.status === 503 || r.status === 500 || /overloaded|high demand|UNAVAILABLE/i.test(msg)) ? "busy"
+            : r.status === 429 ? "rate_limited"
             : (r.status === 401 || r.status === 403 || /API key|API_KEY/i.test(msg)) ? "bad_key"
             : r.status === 404 ? "bad_model" : "error"};
         }
@@ -609,9 +731,25 @@ import { initializeFirestore, getFirestore, persistentLocalCache, persistentSing
         if (c0 && c0.content && c0.content.parts) c0.content.parts.forEach(function(p){ if (p.text && !p.thought) txt += p.text; });
         if (!txt) throw {code:"empty"};
         var gm = c0.groundingMetadata, entry = gm && gm.searchEntryPoint && gm.searchEntryPoint.renderedContent;
+        lastModel = model;
         return {data:parseJSON(txt), entry:entry || ""};
       });
     }, function(e){ throw {code: e && e.name === "AbortError" ? "cancelled" : "network"}; });
+  }
+  // Devuelve {data, entry}. Si el modelo está saturado o sin cupo, reintenta y pasa a los de reserva.
+  function gemini(prompt, opts){
+    opts = opts || {};
+    var chain = modelChain(), i = 0, retried = false;
+    function attempt(){
+      return geminiOnce(chain[i], prompt, opts).catch(function(e){
+        var c = e && e.code;
+        if (c !== "busy" && c !== "rate_limited" && !(c === "bad_model" && i > 0)) throw e;
+        if (c === "busy" && i === 0 && !retried){ retried = true; return wait(1500, opts.signal).then(attempt); }
+        if (++i >= chain.length) throw e;
+        return attempt();
+      });
+    }
+    return attempt();
   }
   function aiError(e, what){
     var base = aiErrorBase(e, what);
@@ -621,6 +759,7 @@ import { initializeFirestore, getFirestore, persistentLocalCache, persistentSing
     var c = e && e.code;
     return c === "bad_key" ? "La clave de Gemini no funciona. Revísala en Ajustes (⚙︎)."
       : c === "bad_model" ? "Ese modelo de Gemini no existe. Cámbialo en Ajustes (⚙︎)."
+      : c === "busy" ? "Gemini está saturado ahora mismo, también los modelos de reserva. Prueba en unos minutos."
       : c === "rate_limited" ? "Gemini ha rechazado la petición por límite de uso."
       : c === "invalid_json" || c === "empty" ? "Gemini ha contestado, pero no he entendido su respuesta. Repite."
       : c === "network" ? "No hay conexión a internet."
@@ -641,17 +780,23 @@ import { initializeFirestore, getFirestore, persistentLocalCache, persistentSing
         if (!r.ok) throw {detail:String(d && d.error && d.error.message || "Error " + r.status)};
         var names = (d.models || []).filter(function(m){ return (m.supportedGenerationMethods || []).indexOf("generateContent") !== -1; })
           .map(function(m){ return String(m.name).replace(/^models\//, ""); });
+        ai.models = names.filter(function(n){ return /^gemini-.*flash/.test(n) && !/image|tts|audio|live|exp|preview|embedding/.test(n); })
+          .sort().reverse().slice(0, 8);
         if (names.indexOf(ai.model) === -1){
           var pick = names.filter(function(n){ return /^gemini-.*flash/.test(n) && !/lite|image|tts|audio|live|preview|exp/.test(n); }).sort().pop()
             || names.filter(function(n){ return /flash/.test(n); })[0] || names[0];
           if (!pick) throw {detail:"Esta clave no tiene ningún modelo disponible."};
-          ai.model = pick; try { localStorage.setItem(LS_AI, JSON.stringify(ai)); } catch(e){}
+          ai.model = pick;
         }
+        try { localStorage.setItem(LS_AI, JSON.stringify(ai)); } catch(e){}
         return gemini("Responde solo con este JSON: {\"ok\": true}");
       });
     }, function(){ throw {detail:"No hay conexión a internet, o el navegador ha bloqueado la petición."}; })
-    .then(function(){ out.textContent = "Todo correcto. Modelo en uso: " + ai.model + ". Ya puedes buscar marcas y usar la cámara."; },
-      function(e){ out.textContent = "Fallo con el modelo " + ai.model + ". " + (e && e.detail ? "Google dice: «" + e.detail + "»" : aiErrorBase(e, "conectar")); });
+    .then(function(){
+      out.textContent = lastModel && lastModel !== ai.model
+        ? "Todo correcto. El modelo " + ai.model + " está saturado ahora, así que he usado " + lastModel + " de reserva. La app cambia sola cuando hace falta."
+        : "Todo correcto. Modelo en uso: " + ai.model + ". Ya puedes buscar marcas y usar la cámara.";
+    }, function(e){ out.textContent = aiErrorBase(e, "conectar") + (e && e.detail ? " Google dice: «" + e.detail + "»" : ""); });
   }
 
   function openSettings(notice){
@@ -674,14 +819,31 @@ import { initializeFirestore, getFirestore, persistentLocalCache, persistentSing
       if (ai.key) testAi(msg); else msg.textContent = "Guardado. Sin clave, la app funciona sin búsqueda de marcas ni cámara.";
     }}}));
     sheetBody.appendChild(msg);
-    sheetBody.appendChild(h("p", {"class":"small", text:"La clave se guarda solo en este móvil. Cada persona la pega en su propio móvil."}));
+    sheetBody.appendChild(h("p", {"class":"small", text:"Cada persona usa su propia clave gratuita: se crea en aistudio.google.com (botón «Get API key») y se pega aquí. Se guarda solo en este móvil."}));
+    if (user && listId){
+      var shareText = "Únete a mi lista de la compra. Abre " + location.origin + location.pathname +
+        " , crea tu cuenta y escribe este código: " + fmtCode(listId);
+      var shareMsg = h("p", {"class":"small", role:"status"});
+      sheetBody.appendChild(h("h2", null, h("span", {text:"Compartir la lista"})));
+      sheetBody.appendChild(h("p", {"class":"code", text:fmtCode(listId)}));
+      sheetBody.appendChild(h("button", {type:"button","class":"btn", text:"Enviar código", on:{click:function(){
+        if (navigator.share) navigator.share({text:shareText}).catch(function(){});
+        else if (navigator.clipboard) navigator.clipboard.writeText(shareText).then(function(){ shareMsg.textContent = "Copiado. Pégalo en un mensaje."; });
+      }}}));
+      sheetBody.appendChild(shareMsg);
+      sheetBody.appendChild(h("p", {"class":"small", text:"Quien tenga este código puede ver y cambiar tu lista. Dáselo solo a quien quieras."}));
+    }
     if (user){
+      sheetBody.appendChild(h("h2", null, h("span", {text:"Cuenta"})));
       sheetBody.appendChild(h("p", {"class":"small", text:"Has entrado como " + (user.email || "usuario") + "."}));
+      if (listId) sheetBody.appendChild(h("button", {type:"button","class":"btn ghost", text:"Salir de esta lista", on:{click:function(){
+        if (!confirm("Dejarás de ver esta lista en tu cuenta. ¿Seguro?")) return;
+        closeSheet(); leaveList();
+      }}}));
       sheetBody.appendChild(h("button", {type:"button","class":"btn ghost", text:"Cerrar sesión", on:{click:function(){
-        closeSheet();
-        state = {items:[], freq:{}, updatedAt:0}; photos = {};
-        try { localStorage.removeItem(LS); localStorage.removeItem(LS_PICS); } catch(e){}
-        render(); signOut(auth);
+        closeSheet(); resetLocal();
+        try { localStorage.removeItem(LS_LIST); } catch(e){}
+        signOut(auth);
       }}}));
     }
     veil.hidden = false;
@@ -693,10 +855,11 @@ import { initializeFirestore, getFirestore, persistentLocalCache, persistentSing
       sheetTitle = document.getElementById("sheetTitle"), sheetClose = document.getElementById("sheetClose");
   var searchCtl = null, searchSeq = 0, searchCache = {};
 
-  function pickRow(name, note, cat){
+  function pickRow(name, note, cat, price, unit){
     var btn = h("button", {type:"button","class":"pick"},
       h("span", {"class":"plus", text:"+"}),
-      h("span", {"class":"txt"}, h("span", {"class":"name", text:name}), note ? h("span", {"class":"note", text:note}) : null));
+      h("span", {"class":"txt"}, h("span", {"class":"name", text:name}), note ? h("span", {"class":"note", text:note}) : null),
+      (price || unit) ? h("span", {"class":"pr"}, price ? h("b", {text:price}) : null, unit ? h("small", {text:unit}) : null) : null);
     btn.addEventListener("click", function(){
       addItem(name, note, cat);
       btn.classList.add("added"); btn.querySelector(".plus").textContent = "✓";
@@ -750,13 +913,17 @@ import { initializeFirestore, getFirestore, persistentLocalCache, persistentSing
     veil.hidden = false; sheetClose.focus();
 
     function show(list){
-      var ul = h("ul"), n = 0;
+      var ul = h("ul"), n = 0, priced = 0;
+      function str(v){ return typeof v === "string" ? v.trim().slice(0, 24) : ""; }
       (Array.isArray(list) ? list : []).slice(0, 30).forEach(function(r){
         if (!r || typeof r.nombre !== "string" || !r.nombre.trim()) return;
-        ul.appendChild(pickRow(r.nombre, typeof r.formato === "string" ? r.formato : "", r.categoria)); n++;
+        var pr = str(r.precio), pu = str(r.precio_unidad);
+        if (pr || pu) priced++;
+        ul.appendChild(pickRow(r.nombre, typeof r.formato === "string" ? r.formato : "", r.categoria, pr, pu)); n++;
       });
       if (!n){ status.textContent = "No conozco productos concretos para esta búsqueda. Puedes añadirla tal cual."; return; }
-      status.textContent = "Resultados de Gemini buscando en internet. Pueden faltar productos o no estar en tu tienda de Almería.";
+      status.textContent = "Resultados de Gemini buscando en internet. Pueden faltar productos o no estar en tu tienda." +
+        (priced ? " Los precios son orientativos: pueden haber cambiado o no ser los de tu tienda." : " No he encontrado precios fiables para esta búsqueda.");
       sheetBody.insertBefore(ul, status);
     }
     function showEntry(html){
@@ -769,22 +936,29 @@ import { initializeFirestore, getFirestore, persistentLocalCache, persistentSing
       if (searchCtl) searchCtl.abort();
       searchCtl = new AbortController();
       status.textContent = "Buscando marcas y variedades…";
-      var prompt = "Eres el buscador de una app de lista de la compra en España. Supermercado: " + STORES[st] +
+      function mkPrompt(web){
+        return "Eres el buscador de una app de lista de la compra en España. Supermercado: " + STORES[st] +
         ". El usuario busca: «" + q.slice(0,80) + "».\n" +
-        "Busca en internet, sobre todo en " + SITES[st] + ", qué productos concretos relacionados con la búsqueda vende ese supermercado en España (la tienda está en Almería). " +
+        (web ? "Busca en internet, sobre todo en " + SITES[st] + ", qué productos concretos relacionados con la búsqueda vende ese supermercado en España y a qué precio. "
+             : "Indica qué productos concretos relacionados con la búsqueda vende habitualmente ese supermercado en España. ") +
         "Enumera hasta 24. " +
         "Primero los de su marca propia (" + BRANDS[st] + "), después otras marcas que suele tener. " +
         "Incluye las variedades habituales (tipos, sabores, sin lactosa, integral, etc.). " +
         "Si la búsqueda ya nombra un producto y marca concretos, ponlo el primero. " +
-        "Incluye solo productos de los que estés razonablemente seguro; no inventes productos ni precios.\n" +
+        "Incluye solo productos de los que estés razonablemente seguro; no inventes productos.\n" +
+        (web ? "Precios: pon \"precio\" (precio de venta, por ejemplo \"1,25 €\") y \"precio_unidad\" (precio por kilo, litro o unidad, por ejemplo \"5,20 €/kg\") " +
+               "solo si aparecen en los resultados de la búsqueda. Si la web da el precio y el peso o volumen pero no el precio por kilo o litro, calcúlalo. " +
+               "Si no encuentras el precio de un producto, deja los dos campos como \"\". Nunca pongas precios de memoria.\n"
+             : "No tienes búsqueda web: deja \"precio\" y \"precio_unidad\" siempre como \"\".\n") +
         "Responde solo con un array JSON de objetos {\"nombre\": nombre del producto con su marca, \"formato\": envase o tamaño habitual o \"\", " +
-        "\"categoria\": uno de " + JSON.stringify(CAT_IDS) + "}. " +
-        "Ejemplo: [{\"nombre\":\"Tortitas de arroz Hacendado\",\"formato\":\"Paquete 130 g\",\"categoria\":\"despensa\"}]";
+        "\"precio\": texto o \"\", \"precio_unidad\": texto o \"\", \"categoria\": uno de " + JSON.stringify(CAT_IDS) + "}. " +
+        "Ejemplo: [{\"nombre\":\"Tortitas de arroz Hacendado\",\"formato\":\"Paquete 130 g\",\"precio\":\"\",\"precio_unidad\":\"\",\"categoria\":\"despensa\"}]";
+      }
       var sig = searchCtl.signal;
-      gemini(prompt, {search:true, signal:sig}).catch(function(e){
+      gemini(mkPrompt(true), {search:true, signal:sig}).catch(function(e){
         // Si la búsqueda web no está disponible para esta clave o modelo, se pregunta sin ella.
-        if (e && (e.code === "cancelled" || e.code === "bad_key" || e.code === "network" || e.code === "bad_model")) throw e;
-        return gemini(prompt, {signal:sig});
+        if (e && (e.code === "cancelled" || e.code === "bad_key" || e.code === "network" || e.code === "bad_model" || e.code === "busy")) throw e;
+        return gemini(mkPrompt(false), {signal:sig});
       }).then(function(r){
         if (my !== searchSeq) return;
         searchCache[key] = r; show(r.data); showEntry(r.entry);
