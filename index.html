@@ -188,7 +188,7 @@ li + li{border-top:1px solid var(--line)}
     <div class="toast" id="toast" role="status" hidden><span id="toastText"></span><button type="button" id="toastUndo" hidden>Deshacer</button></div>
     <div class="chips" id="chips" aria-label="Productos habituales"></div>
     <div class="add">
-      <button type="button" id="camBtn" class="cam" hidden aria-label="Añadir con una foto del producto o del ticket">📷</button>
+      <button type="button" id="camBtn" class="cam" aria-label="Añadir con una foto del producto o del ticket">📷</button>
       <input type="file" id="camFile" accept="image/*" capture="environment" hidden>
       <input type="file" id="picFile" accept="image/*" hidden>
       <input id="input" type="text" autocomplete="off" autocapitalize="sentences" enterkeyhint="done"
@@ -562,7 +562,8 @@ import { initializeFirestore, getFirestore, persistentLocalCache, persistentSing
     var q = input.value.replace(/\s+/g," ").trim();
     if (!q) { input.focus(); return; }
     input.value = ""; renderChips();
-    if (aiOn()) { input.blur(); openSheet(q); } else { addItem(q); input.focus(); }
+    if (aiOn()) { input.blur(); openSheet(q); }
+    else { addItem(q); input.focus(); say("Añadido sin marcas: falta la clave de Gemini. Pégala en Ajustes (⚙︎)."); }
   }
 
   /* ---------- Gemini: buscar marcas y leer fotos ---------- */
@@ -573,7 +574,7 @@ import { initializeFirestore, getFirestore, persistentLocalCache, persistentSing
   var BRANDS = {mercadona:"Hacendado, Deliplus, Bosque Verde, Compy", consum:"Consum, Consum Eco, Kyrey"};
   var SITES = {mercadona:"tienda.mercadona.es", consum:"tienda.consum.es"};
   var camBtn = document.getElementById("camBtn"), camFile = document.getElementById("camFile");
-  function syncAiUi(){ camBtn.hidden = !aiOn(); }
+  function syncAiUi(){ camBtn.hidden = false; }
   syncAiUi();
 
   function parseJSON(t){
@@ -599,7 +600,8 @@ import { initializeFirestore, getFirestore, persistentLocalCache, persistentSing
       return r.json().catch(function(){ return {}; }).then(function(d){
         if (!r.ok){
           var msg = JSON.stringify(d || {});
-          throw {code: r.status === 429 ? "rate_limited"
+          throw {status:r.status, detail:String(d && d.error && d.error.message || "").slice(0, 220),
+            code: r.status === 429 ? "rate_limited"
             : (r.status === 401 || r.status === 403 || /API key|API_KEY/i.test(msg)) ? "bad_key"
             : r.status === 404 ? "bad_model" : "error"};
         }
@@ -612,10 +614,15 @@ import { initializeFirestore, getFirestore, persistentLocalCache, persistentSing
     }, function(e){ throw {code: e && e.name === "AbortError" ? "cancelled" : "network"}; });
   }
   function aiError(e, what){
+    var base = aiErrorBase(e, what);
+    return e && e.detail ? base + " Google dice: «" + e.detail + "»" : base;
+  }
+  function aiErrorBase(e, what){
     var c = e && e.code;
     return c === "bad_key" ? "La clave de Gemini no funciona. Revísala en Ajustes (⚙︎)."
       : c === "bad_model" ? "Ese modelo de Gemini no existe. Cámbialo en Ajustes (⚙︎)."
-      : c === "rate_limited" ? "Has llegado al límite de uso de Gemini. Espera un poco y repite."
+      : c === "rate_limited" ? "Gemini ha rechazado la petición por límite de uso."
+      : c === "invalid_json" || c === "empty" ? "Gemini ha contestado, pero no he entendido su respuesta. Repite."
       : c === "network" ? "No hay conexión a internet."
       : "No he podido " + what + " ahora.";
   }
@@ -625,7 +632,29 @@ import { initializeFirestore, getFirestore, persistentLocalCache, persistentSing
   }
 
   /* Ajustes */
-  function openSettings(){
+  // Comprueba la clave y el modelo, y elige un modelo válido si el guardado no existe.
+  function testAi(out){
+    out.textContent = "Probando…";
+    var base = "https://generativelanguage.googleapis.com/v1beta/models";
+    fetch(base + "?pageSize=200", {headers:{"x-goog-api-key":ai.key}}).then(function(r){
+      return r.json().catch(function(){ return {}; }).then(function(d){
+        if (!r.ok) throw {detail:String(d && d.error && d.error.message || "Error " + r.status)};
+        var names = (d.models || []).filter(function(m){ return (m.supportedGenerationMethods || []).indexOf("generateContent") !== -1; })
+          .map(function(m){ return String(m.name).replace(/^models\//, ""); });
+        if (names.indexOf(ai.model) === -1){
+          var pick = names.filter(function(n){ return /^gemini-.*flash/.test(n) && !/lite|image|tts|audio|live|preview|exp/.test(n); }).sort().pop()
+            || names.filter(function(n){ return /flash/.test(n); })[0] || names[0];
+          if (!pick) throw {detail:"Esta clave no tiene ningún modelo disponible."};
+          ai.model = pick; try { localStorage.setItem(LS_AI, JSON.stringify(ai)); } catch(e){}
+        }
+        return gemini("Responde solo con este JSON: {\"ok\": true}");
+      });
+    }, function(){ throw {detail:"No hay conexión a internet, o el navegador ha bloqueado la petición."}; })
+    .then(function(){ out.textContent = "Todo correcto. Modelo en uso: " + ai.model + ". Ya puedes buscar marcas y usar la cámara."; },
+      function(e){ out.textContent = "Fallo con el modelo " + ai.model + ". " + (e && e.detail ? "Google dice: «" + e.detail + "»" : aiErrorBase(e, "conectar")); });
+  }
+
+  function openSettings(notice){
     if (searchCtl) searchCtl.abort();
     searchCtl = null; searchSeq++;
     sheetTitle.textContent = "Ajustes"; sheetBody.textContent = "";
@@ -635,13 +664,14 @@ import { initializeFirestore, getFirestore, persistentLocalCache, persistentSing
     modelIn.value = ai.model;
     var msg = h("p", {"class":"small", role:"status"});
     var user = auth && auth.currentUser;
+    if (typeof notice === "string") sheetBody.appendChild(h("p", {"class":"hint", text:notice}));
     sheetBody.appendChild(h("label", {"class":"field"}, h("span", {text:"Clave de Gemini"}), keyIn));
     sheetBody.appendChild(h("label", {"class":"field"}, h("span", {text:"Modelo"}), modelIn));
     sheetBody.appendChild(h("button", {type:"button","class":"btn", text:"Guardar", on:{click:function(){
       ai.key = keyIn.value.trim(); ai.model = modelIn.value.trim() || "gemini-flash-latest";
       try { localStorage.setItem(LS_AI, JSON.stringify(ai)); } catch(e){}
       searchCache = {}; syncAiUi();
-      msg.textContent = ai.key ? "Guardado. Ya puedes buscar marcas y usar la cámara." : "Guardado. Sin clave, la app funciona sin búsqueda de marcas ni cámara.";
+      if (ai.key) testAi(msg); else msg.textContent = "Guardado. Sin clave, la app funciona sin búsqueda de marcas ni cámara.";
     }}}));
     sheetBody.appendChild(msg);
     sheetBody.appendChild(h("p", {"class":"small", text:"La clave se guarda solo en este móvil. Cada persona la pega en su propio móvil."}));
@@ -656,7 +686,7 @@ import { initializeFirestore, getFirestore, persistentLocalCache, persistentSing
     }
     veil.hidden = false;
   }
-  document.getElementById("gearBtn").addEventListener("click", openSettings);
+  document.getElementById("gearBtn").addEventListener("click", function(){ openSettings(); });
 
   /* Hoja de resultados */
   var veil = document.getElementById("veil"), sheetBody = document.getElementById("sheetBody"),
@@ -796,7 +826,10 @@ import { initializeFirestore, getFirestore, persistentLocalCache, persistentSing
       img.src = url;
     });
   }
-  camBtn.addEventListener("click", function(){ camFile.value = ""; camFile.click(); });
+  camBtn.addEventListener("click", function(){
+    if (!aiOn()){ openSettings("Para leer fotos y tickets hace falta la clave de Gemini. Pégala aquí y pulsa Guardar."); return; }
+    camFile.value = ""; camFile.click();
+  });
   function thumbOf(file){
     return shrink(file, 360).then(function(b){ return new Promise(function(res, rej){
       var fr = new FileReader(); fr.onload = function(){ res(String(fr.result)); }; fr.onerror = rej; fr.readAsDataURL(b);
@@ -847,8 +880,7 @@ import { initializeFirestore, getFirestore, persistentLocalCache, persistentSing
       thumbOf(file).then(function(d){ if (find(newId)) setPhoto(newId, d); }, function(){});
       say("Añadido a " + STORES[st] + ": " + one.nombre.trim().slice(0,80), before);
     }, function(e){
-      if (e && e.code && e.code !== "error" && e.code !== "empty" && e.code !== "invalid_json") say(aiError(e, "leer la foto"));
-      else say("No he podido leer la foto. Si es un ticket muy largo, hazlo en dos fotos.");
+      say(aiError(e, "leer la foto"), null, true);
     }).then(function(){ camBtn.disabled = false; });
   });
   document.getElementById("addBtn").addEventListener("click", submit);
